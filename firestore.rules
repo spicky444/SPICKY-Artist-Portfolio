@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: artworks
+    // Document ID: auto-generated
+    // Fields:
+    //   - id: string (optional)
+    //   - title: string (required, < 100 chars)
+    //   - description: string (optional, < 500 chars)
+    //   - category: string (required, ['Portraits', 'Sketches', 'Digital Arts'])
+    //   - imageUrl: string (required, < 2000 chars)
+    //   - createdAt: timestamp (optional)
+    //   - authorUid: string (required, must match creator's UID)
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "spicky444@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    function isValidArtwork(data) {
+      return data.keys().hasAll(['title', 'category', 'imageUrl', 'authorUid']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.category in ['Portraits', 'Sketches', 'Digital Arts'] &&
+             data.imageUrl is string && data.imageUrl.size() < 2000 &&
+             data.authorUid is string && data.authorUid == request.auth.uid &&
+             (!('description' in data) || (data.description is string && data.description.size() < 500));
+    }
+
+    match /artworks/{artworkId} {
+      // Publicly readable
+      allow read: if true;
+
+      // Only admin (owner) can create, update, or delete
+      allow create: if isAdmin() && isValidArtwork(request.resource.data);
+      allow update: if isAdmin() && isValidArtwork(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

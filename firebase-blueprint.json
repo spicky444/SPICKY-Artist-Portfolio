@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "Artwork": {
+      "title": "Artwork",
+      "description": "A piece of art in the gallery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of the artwork" },
+        "title": { "type": "string", "description": "Title of the artwork" },
+        "description": { "type": "string", "description": "Description of the artwork" },
+        "category": { "type": "string", "description": "Category (Portraits, Sketches, Digital Arts)" },
+        "imageUrl": { "type": "string", "description": "URL of the image" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the artwork was added" },
+        "authorUid": { "type": "string", "description": "UID of the user who added it" }
+      },
+      "required": ["title", "category", "imageUrl", "authorUid"]
+    }
+  },
+  "firestore": {
+    "/artworks/{artworkId}": {
+      "schema": "Artwork",
+      "description": "Collection of artworks in the gallery"
+    }
+  }
+}
