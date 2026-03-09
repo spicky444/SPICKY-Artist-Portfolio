@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Instagram, 
@@ -96,7 +96,7 @@ const ARTWORKS: Artwork[] = [
 ];
 
 const TESTIMONIALS = [
-  { name: "SPICKY", role: "ARTIST", comment: "Art that preserves what matters most" },
+  { name: "SPICKY", role: "ARTIST", comment: "art that preserves what matters most" },
   { name: "Marcus Thorne", role: "Gallery Owner", comment: "One of the most promising emerging artists I've had the pleasure of working with." },
 ];
 
