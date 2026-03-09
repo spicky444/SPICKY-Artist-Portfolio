@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import artistProfile from './assets/artist-profile.jpg';
 import { 
   Instagram, 
   Twitter, 
@@ -138,7 +139,7 @@ const Hero = () => {
           <div className="absolute -inset-2 bg-orange-100/50 rounded-full -z-10 group-hover:scale-105 transition-transform duration-500"></div>
           <div className="relative w-full h-full overflow-hidden rounded-full shadow-xl border-4 border-white">
             <img 
-              src="/artist-profile.jpg" 
+              src={artistProfile} 
               alt="SPICKY" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
