@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import artistProfile from './assets/artist-profile.jpg';
 import { 
   Instagram, 
   Twitter, 
@@ -9,33 +9,15 @@ import {
   ChevronRight, 
   X, 
   ExternalLink,
-  Palette,
-  Layers,
-  PenTool,
-  LogIn,
-  LogOut,
-  Plus,
-  Trash2
+  Palette
 } from 'lucide-react';
 import { 
   collection, 
   onSnapshot, 
-  addDoc, 
-  deleteDoc, 
-  doc, 
   query, 
-  orderBy,
-  Timestamp,
-  getDocFromServer
+  orderBy
 } from 'firebase/firestore';
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  onAuthStateChanged, 
-  signOut,
-  User
-} from 'firebase/auth';
-import { db, auth } from './firebase';
+import { db } from './firebase';
 
 // --- Error Handling ---
 enum OperationType {
@@ -47,32 +29,8 @@ enum OperationType {
   WRITE = 'write',
 }
 
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-  }
-}
-
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-    },
-    operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error(`Firestore Error [${operationType}] at ${path}:`, error);
 }
 
 // --- Types ---
@@ -137,12 +95,14 @@ const Hero = () => {
       >
         <div className="relative w-32 h-32 md:w-48 md:h-48 mr-auto mb-8 group">
           <div className="absolute -inset-2 bg-orange-100/50 rounded-full -z-10 group-hover:scale-105 transition-transform duration-500"></div>
-          <div className="relative w-full h-full overflow-hidden rounded-full shadow-xl border-4 border-white">
+          <div className="relative w-full h-full overflow-hidden rounded-full shadow-xl border-4 border-white bg-slate-100">
             <img 
-              src={artistProfile} 
+              src="/artist-profile.jpg" 
               alt="SPICKY" 
               className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'https://picsum.photos/seed/spicky/400/400';
+              }}
             />
           </div>
         </div>
@@ -166,121 +126,35 @@ const Hero = () => {
 const Gallery = () => {
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   
   const [filter, setFilter] = useState<'All' | Artwork['category']>('All');
   const [selectedArt, setSelectedArt] = useState<Artwork | null>(null);
-  const [isManaging, setIsManaging] = useState(false);
-  const [newArt, setNewArt] = useState<Partial<Artwork>>({
-    title: '',
-    category: 'Portraits',
-    description: '',
-    image: ''
-  });
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const ADMIN_EMAIL = "spicky444@gmail.com";
-
+  
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setIsAdmin(currentUser?.email === ADMIN_EMAIL && currentUser?.emailVerified);
-    });
-
     const q = query(collection(db, 'artworks'), orderBy('createdAt', 'desc'));
     const unsubscribeFirestore = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Artwork[];
-      setArtworks(docs);
+      
+      // If Firestore is empty, use mock data
+      if (docs.length === 0) {
+        setArtworks(ARTWORKS);
+      } else {
+        setArtworks(docs);
+      }
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'artworks');
+      setArtworks(ARTWORKS);
+      setLoading(false);
     });
 
-    // Test connection
-    const testConnection = async () => {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
-      }
-    };
-    testConnection();
-
     return () => {
-      unsubscribeAuth();
       unsubscribeFirestore();
     };
   }, []);
-
-  const handleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login failed", error);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setIsManaging(false);
-    } catch (error) {
-      console.error("Logout failed", error);
-    }
-  };
-
-  const handleAddArt = async () => {
-    if (newArt.title && newArt.image && user) {
-      try {
-        const artData = {
-          title: newArt.title,
-          category: newArt.category,
-          description: newArt.description || '',
-          image: newArt.image,
-          createdAt: Timestamp.now(),
-          authorUid: user.uid
-        };
-        await addDoc(collection(db, 'artworks'), artData);
-        setNewArt({ title: '', category: 'Portraits', description: '', image: '' });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, 'artworks');
-      }
-    }
-  };
-
-  const handleDeleteArt = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this artwork?')) {
-      try {
-        await deleteDoc(doc(db, 'artworks', id));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `artworks/${id}`);
-      }
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Check file size (Firestore limit is 1MB, but we should be safer)
-      if (file.size > 800000) {
-        alert("Image is too large. Please use an image under 800KB.");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewArt({ ...newArt, image: reader.result as string });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   const filteredArt = filter === 'All' ? artworks : artworks.filter(a => a.category === filter);
 
@@ -290,29 +164,6 @@ const Gallery = () => {
         <div>
           <div className="flex items-center gap-4 mb-4">
             <h3 className="font-serif text-4xl">Selected Works</h3>
-            {isAdmin ? (
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setIsManaging(!isManaging)}
-                  className="text-xs font-bold uppercase tracking-widest px-3 py-1 border border-slate-200 rounded-full hover:bg-slate-50 transition-colors flex items-center gap-1"
-                >
-                  {isManaging ? 'Done' : <><Plus size={14}/> Manage</>}
-                </button>
-                <button 
-                  onClick={handleLogout}
-                  className="text-xs font-bold uppercase tracking-widest px-3 py-1 border border-red-100 text-red-600 rounded-full hover:bg-red-50 transition-colors flex items-center gap-1"
-                >
-                  <LogOut size={14}/> Logout
-                </button>
-              </div>
-            ) : (
-              <button 
-                onClick={handleLogin}
-                className="text-xs font-bold uppercase tracking-widest px-3 py-1 border border-slate-200 rounded-full hover:bg-slate-50 transition-colors flex items-center gap-1"
-              >
-                <LogIn size={14}/> Admin Login
-              </button>
-            )}
           </div>
           <p className="text-slate-500 max-w-md">Portrait sketches and artworks created using graphite, charcoal, pen, and digital tools</p>
         </div>
@@ -335,65 +186,10 @@ const Gallery = () => {
         </div>
       ) : (
         <>
-          {isManaging && isAdmin && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-16 p-8 bg-slate-50 rounded-2xl border border-slate-100"
-            >
-              <h4 className="font-serif text-xl mb-6">Add New Artwork</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <input 
-                    type="text" 
-                    placeholder="Artwork Title"
-                    value={newArt.title}
-                    onChange={e => setNewArt({...newArt, title: e.target.value})}
-                    className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                  />
-                  <select 
-                    value={newArt.category}
-                    onChange={e => setNewArt({...newArt, category: e.target.value as any})}
-                    className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                  >
-                    <option value="Portraits">Portraits</option>
-                    <option value="Sketches">Sketches</option>
-                    <option value="Digital Arts">Digital Arts</option>
-                  </select>
-                  <textarea 
-                    placeholder="Description"
-                    value={newArt.description}
-                    onChange={e => setNewArt({...newArt, description: e.target.value})}
-                    className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 h-24"
-                  />
-                </div>
-                <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-xl p-4 hover:border-orange-400 transition-colors cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                  {newArt.image ? (
-                    <img src={newArt.image} className="max-h-48 rounded-lg shadow-md" alt="Preview" />
-                  ) : (
-                    <div className="text-center text-slate-400">
-                      <p className="text-sm font-medium">Click to upload artwork image</p>
-                      <p className="text-xs">JPG, PNG or WebP (Max 800KB)</p>
-                    </div>
-                  )}
-                  <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
-                </div>
-              </div>
-              <button 
-                onClick={handleAddArt}
-                disabled={!newArt.title || !newArt.image}
-                className="mt-8 w-full md:w-auto bg-orange-700 text-white px-12 py-4 rounded-full font-medium hover:bg-orange-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Add to Gallery
-              </button>
-            </motion.div>
-          )}
-
           {artworks.length === 0 ? (
             <div className="text-center py-20 text-slate-400">
               <Palette size={48} className="mx-auto mb-4 opacity-20" />
               <p>No artworks found in the gallery.</p>
-              {isAdmin && <p className="text-sm mt-2">Click "Manage" to add your first piece!</p>}
             </div>
           ) : (
             <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -411,17 +207,9 @@ const Gallery = () => {
                       scale: { duration: 0.3 }
                     }}
                     whileHover={{ y: -10 }}
-                    onClick={() => !isManaging && setSelectedArt(art)}
-                    className={`group relative ${isManaging ? 'cursor-default' : 'cursor-pointer'}`}
+                    onClick={() => setSelectedArt(art)}
+                    className="group relative cursor-pointer"
                   >
-                    {isManaging && isAdmin && (
-                      <button 
-                        onClick={(e) => handleDeleteArt(art.id, e)}
-                        className="absolute top-4 right-4 z-20 bg-red-500 text-white p-2 rounded-full shadow-lg hover:bg-red-600 transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
                     <div className="relative aspect-[3/4] overflow-hidden rounded-xl mb-4">
                       <img 
                         src={art.image} 
@@ -429,11 +217,9 @@ const Gallery = () => {
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                         referrerPolicy="no-referrer"
                       />
-                      {!isManaging && (
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <span className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold">View Detail</span>
-                        </div>
-                      )}
+                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold">View Detail</span>
+                      </div>
                     </div>
                     <h4 className="font-serif text-xl">{art.title}</h4>
                     <p className="text-sm text-slate-400">{art.category}</p>
@@ -577,16 +363,54 @@ const Footer = () => (
   </footer>
 );
 
+class ErrorBoundary extends React.Component<any, any> {
+  constructor(props: any) {
+    super(props);
+    (this as any).state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if ((this as any).state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 text-center">
+          <div className="max-w-md">
+            <h2 className="font-serif text-3xl mb-4">Something went wrong.</h2>
+            <p className="text-slate-600 mb-8">We encountered an unexpected error. Please try refreshing the page.</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-slate-900 text-white px-8 py-3 rounded-full font-medium hover:bg-black transition-colors"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (this as any).props.children;
+  }
+}
+
 export default function App() {
   return (
-    <div className="overflow-x-hidden selection:bg-orange-100 selection:text-orange-900">
-      <Navbar />
-      <Hero />
-      <Gallery />
-      <ArtMediums />
-      <Testimonials />
-      <Contact />
-      <Footer />
-    </div>
+    <ErrorBoundary>
+      <div className="overflow-x-hidden selection:bg-orange-100 selection:text-orange-900">
+        <Navbar />
+        <Hero />
+        <Gallery />
+        <ArtMediums />
+        <Testimonials />
+        <Contact />
+        <Footer />
+      </div>
+    </ErrorBoundary>
   );
 }
